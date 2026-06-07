@@ -32,7 +32,8 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? 'http://localhost:5173')
   .split(',').map(s => s.trim()).filter(Boolean)
 
 // ── JWT secret (auto-generated on first run, persisted to file) ───
-const SECRET_FILE = new URL('./jwt-secret.key', import.meta.url).pathname
+const DATA_DIR    = process.env.DATA_DIR ?? new URL('.', import.meta.url).pathname
+const SECRET_FILE = new URL('jwt-secret.key', `file://${DATA_DIR}/`).pathname
 let JWT_SECRET
 if (existsSync(SECRET_FILE)) {
   JWT_SECRET = new TextEncoder().encode(readFileSync(SECRET_FILE, 'utf8').trim())
@@ -45,7 +46,7 @@ if (existsSync(SECRET_FILE)) {
 }
 
 // ── SQLite quota store ────────────────────────────────────────────
-const db = new Database(new URL('./quota.db', import.meta.url).pathname)
+const db = new Database(new URL('quota.db', `file://${DATA_DIR}/`).pathname)
 db.exec(`
   CREATE TABLE IF NOT EXISTS quota (
     address    TEXT    PRIMARY KEY,
