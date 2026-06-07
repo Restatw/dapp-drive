@@ -5,12 +5,16 @@
 #   .\deploy.ps1 -SetupCors             # first time: configure CORS + fix listen address
 #   .\deploy.ps1 -SetupCors -SkipBuild  # fix CORS only (no rebuild, no re-add)
 #   .\deploy.ps1 -Online                # propagate IPNS record to DHT network
+#   .\deploy.ps1 -SetupProxy            # install proxy server dependencies
+#   .\deploy.ps1 -StartProxy            # start proxy in background (requires PM2)
 
 [CmdletBinding()]
 param(
-    [switch]$SetupCors, # configure API CORS (run once after creating the key)
-    [switch]$Online,    # propagate IPNS record to DHT network
-    [switch]$SkipBuild  # skip npm build (useful when only re-publishing or fixing CORS)
+    [switch]$SetupCors,   # configure API CORS (run once after creating the key)
+    [switch]$Online,      # propagate IPNS record to DHT network
+    [switch]$SkipBuild,   # skip npm build (useful when only re-publishing or fixing CORS)
+    [switch]$SetupProxy,  # install proxy server npm dependencies
+    [switch]$StartProxy   # start/restart proxy with PM2
 )
 
 Set-Location $PSScriptRoot
@@ -146,7 +150,67 @@ if ($SetupCors) {
     Warn "  ipfs daemon"
 }
 
-# ── 7. Summary ────────────────────────────────────────────────────
+# ── 7. Proxy server setup (-SetupProxy) ──────────────────────────
+if ($SetupProxy) {
+    Step "Installing proxy server dependencies"
+    if (-not (Test-Path "server\package.json")) { Fail "server\package.json not found" }
+
+    Push-Location server
+    npm install
+    if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "npm install failed in server/" }
+    Pop-Location
+    Ok "server/node_modules ready"
+
+    # Create server/.env from example if it doesn't exist yet
+    if (-not (Test-Path "server\.env")) {
+        Copy-Item "server\.env.example" "server\.env"
+        Warn "Created server\.env from example — edit it before starting the proxy!"
+    } else {
+        Info "server\.env already exists"
+    }
+}
+
+# ── 8. Start proxy with PM2 (-StartProxy) ─────────────────────────
+if ($StartProxy) {
+    Step "Starting proxy with PM2"
+
+    # Check PM2 is available
+    $pm2 = Get-Command pm2 -ErrorAction SilentlyContinue
+    if (-not $pm2) {
+        Warn "PM2 not found. Install it with:  npm install -g pm2"
+        Warn "Then re-run:  .\deploy.ps1 -StartProxy"
+        Fail "PM2 required to manage the proxy process"
+    }
+
+    if (-not (Test-Path "server\node_modules")) {
+        Warn "Proxy dependencies not installed. Run:  .\deploy.ps1 -SetupProxy"
+        Fail "Run -SetupProxy first"
+    }
+
+    # Load env from server/.env so PM2 picks up the right PORT/ALLOWED_ORIGINS
+    if (Test-Path "server\.env") {
+        Get-Content "server\.env" | ForEach-Object {
+            if ($_ -match '^\s*([^#=\s]+)\s*=\s*(.+)$') {
+                [System.Environment]::SetEnvironmentVariable($Matches[1], $Matches[2].Trim(), 'Process')
+            }
+        }
+    }
+
+    Push-Location server
+    pm2 restart dapp-drive-proxy --update-env 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        # Not yet started — start fresh
+        pm2 start index.js --name dapp-drive-proxy --update-env
+        if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "PM2 start failed" }
+    }
+    Pop-Location
+
+    pm2 save
+    Ok "Proxy is running  (pm2 logs dapp-drive-proxy)"
+    Info "Health check: curl http://localhost:$($env:PORT ?? '3000')/health"
+}
+
+# ── 9. Summary ────────────────────────────────────────────────────
 $line = "-" * 60
 Write-Host ""
 Write-Host $line -ForegroundColor DarkGray

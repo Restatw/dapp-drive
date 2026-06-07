@@ -130,12 +130,14 @@ async function handleMoveConfirm(destPath) {
     <!-- Offline banner -->
     <Transition name="banner">
       <div
-        v-if="!ipfs.connected && !ipfs.checking"
+        v-if="drive.isOffline"
         class="bg-amber-50 border-b border-amber-200 px-5 py-2 text-sm text-amber-700 flex items-center gap-2 shrink-0"
       >
         <span class="text-base">⚠️</span>
-        <span>IPFS node is offline. Run <code class="font-mono bg-amber-100 px-1 rounded text-xs">ipfs daemon</code> then
-          <button class="underline font-semibold ml-0.5" @click="ipfs.checkConnection()">retry</button>.
+        <span>
+          {{ drive.isCachedView ? 'IPFS 離線，顯示上次快取的目錄。' : 'IPFS node is offline.' }}
+          Run <code class="font-mono bg-amber-100 px-1 rounded text-xs">ipfs daemon</code> then
+          <button class="underline font-semibold ml-0.5" @click="ipfs.checkConnection().then(() => drive.refresh())">retry</button>.
         </span>
       </div>
     </Transition>

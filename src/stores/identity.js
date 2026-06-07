@@ -5,6 +5,9 @@ import { useIpfsStore } from './ipfs'
 const SESSION_KEY = 'dapp-drive:session'
 const SESSION_TTL = 24 * 60 * 60 * 1000 // 24 h
 
+const PROXY_URL   = import.meta.env.VITE_PROXY_URL  ?? ''  // e.g. https://your-domain.com
+const USE_PROXY   = import.meta.env.VITE_USE_PROXY === 'true'
+
 // ── EIP-4361 SIWE message ─────────────────────────────────────────
 function buildSiweMessage({ address, domain, uri, nonce, issuedAt, expirationTime }) {
   return [
@@ -86,7 +89,7 @@ export const useIdentityStore = defineStore('identity', () => {
   // ── Session ────────────────────────────────────────────────────
   function restoreSession() {
     try {
-      const { addr, expiry, ipns } = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}')
+      const { addr, expiry, ipns } = _loadRaw()
       if (!addr || Date.now() > expiry) { localStorage.removeItem(SESSION_KEY); return false }
       address.value   = addr
       isAuth.value    = true
@@ -95,12 +98,36 @@ export const useIdentityStore = defineStore('identity', () => {
     } catch { return false }
   }
 
-  function _saveSession() {
+  function _saveSession(jwt = null) {
+    const existing = _loadRaw()
     localStorage.setItem(SESSION_KEY, JSON.stringify({
       addr:   address.value,
       expiry: Date.now() + SESSION_TTL,
       ipns:   ipnsKeyId.value,
+      // Preserve existing JWT unless a new one is explicitly provided
+      jwt:    jwt ?? existing?.jwt ?? null,
     }))
+  }
+
+  function _loadRaw() {
+    try { return JSON.parse(localStorage.getItem(SESSION_KEY) ?? '{}') } catch { return {} }
+  }
+
+  // Exchange the SIWE proof for a proxy JWT (called after connect(), only when proxy is enabled)
+  async function _exchangeJwt(addr, message, signature) {
+    if (!USE_PROXY || !PROXY_URL) return
+    try {
+      const resp = await fetch(`${PROXY_URL}/auth/login`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ address: addr, message, signature }),
+      })
+      if (!resp.ok) { console.warn('[identity] JWT exchange failed:', resp.status); return }
+      const { token } = await resp.json()
+      _saveSession(token)
+    } catch (e) {
+      console.warn('[identity] Could not reach proxy for JWT:', e.message)
+    }
   }
 
   // ── IPFS key: ensure the deterministic key exists on this node ─
@@ -161,6 +188,9 @@ export const useIdentityStore = defineStore('identity', () => {
       isAuth.value  = true
       _saveSession()
 
+      // Exchange SIWE proof for a proxy JWT (no-op when USE_PROXY=false)
+      _exchangeJwt(addr, message, signature)
+
       // Derive + import IPFS key in background (may show second MetaMask popup first time)
       ensureIpfsKey()
 
@@ -178,6 +208,7 @@ export const useIdentityStore = defineStore('identity', () => {
     isAuth.value    = false
     ipnsKeyId.value = null
     localStorage.removeItem(SESSION_KEY)
+    // JWT lives inside the session object so it's cleared above
   }
 
   function watchAccountChanges() {

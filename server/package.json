@@ -1,0 +1,18 @@
+{
+  "name": "dapp-drive-proxy",
+  "version": "1.0.0",
+  "description": "IPFS API proxy with JWT auth and per-user quota",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev":   "node --watch index.js"
+  },
+  "dependencies": {
+    "@fastify/cors":   "^9.0.1",
+    "better-sqlite3":  "^9.6.0",
+    "ethers":          "^6.13.0",
+    "fastify":         "^4.28.0",
+    "jose":            "^5.9.3"
+  }
+}

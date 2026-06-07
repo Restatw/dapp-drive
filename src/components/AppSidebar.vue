@@ -21,17 +21,21 @@ const syncLabel = computed(() => {
     case 'syncing':    return '↓ Syncing…'
     case 'error':      return '⚠ Sync error'
     default:
+      if (!ipfs.connected)        return '— IPFS offline'
+      if (!identity.ipnsKeyId)    return '⟳ Importing key…'
       if (drive.lastPublishedAt) {
         const diff = Math.round((Date.now() - drive.lastPublishedAt) / 60000)
         return diff < 1 ? '↑ Just published' : `↑ ${diff}m ago`
       }
-      return identity.ipnsKeyId ? 'IPNS ready' : 'Setting up…'
+      return 'IPNS ready'
   }
 })
 
 const syncLabelClass = computed(() => {
-  if (drive.syncState === 'error') return 'text-red-500'
-  if (drive.syncState !== 'idle') return 'text-blue-500'
+  if (drive.syncState === 'error')  return 'text-red-500'
+  if (drive.syncState !== 'idle')   return 'text-blue-500'
+  if (!ipfs.connected)              return 'text-gray-400'
+  if (!identity.ipnsKeyId)          return 'text-amber-500'
   return 'text-gray-400'
 })
 </script>

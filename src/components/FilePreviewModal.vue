@@ -29,9 +29,9 @@ const cid          = ref('')
 const textContent  = ref('')
 const loading      = ref(false)
 const loadError    = ref(false)
-const imgZoom      = ref(1)
-const imgFit       = ref(true)    // true = contain; false = actual size with scroll
-const imgRotate    = ref(0)
+const imgZoom   = ref(1)
+const imgFit    = ref(true)    // true = contain; false = zoom with scroll
+const imgRotate = ref(0)
 
 const fileType   = computed(() => entry.value ? getFileType(entry.value.Name) : '')
 const gatewayUrl = computed(() => cid.value ? ipfs.getGatewayUrl(cid.value) : '')
@@ -123,16 +123,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
         style="width: min(92vw, 1100px); height: min(90vh, 780px)">
 
         <!-- ── Header ──────────────────────────────────────────── -->
-        <div class="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 shrink-0 min-w-0">
+        <div class="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 shrink-0 overflow-x-auto">
 
           <!-- Prev / counter / Next -->
           <div class="flex items-center gap-1 shrink-0">
             <button
               class="p-1.5 rounded-lg transition"
               :class="hasPrev ? 'text-gray-500 hover:bg-gray-100' : 'text-gray-200 cursor-default'"
-              :disabled="!hasPrev"
-              title="Previous (←)"
-              @click="prev"
+              :disabled="!hasPrev" title="Previous (←)" @click="prev"
             >
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -142,9 +140,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
             <button
               class="p-1.5 rounded-lg transition"
               :class="hasNext ? 'text-gray-500 hover:bg-gray-100' : 'text-gray-200 cursor-default'"
-              :disabled="!hasNext"
-              title="Next (→)"
-              @click="next"
+              :disabled="!hasNext" title="Next (→)" @click="next"
             >
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -156,7 +152,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
 
           <!-- Icon + filename -->
           <span class="text-base shrink-0 select-none">{{ getFileIcon(entry) }}</span>
-          <h3 class="text-sm font-semibold text-gray-800 truncate flex-1 min-w-0" :title="entry?.Name">
+          <h3 class="text-sm font-semibold text-gray-800 truncate min-w-0" style="flex: 1 1 60px" :title="entry?.Name">
             {{ entry?.Name }}
           </h3>
 
@@ -175,9 +171,8 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"/></svg>
             </button>
             <button
-              class="text-xs font-mono text-gray-500 px-1.5 py-1 rounded hover:bg-gray-100 transition w-12 text-center"
-              title="Reset to fit (0)"
-              @click="zoomFit"
+              class="text-xs font-mono text-gray-500 px-1.5 py-1 rounded hover:bg-gray-100 transition w-12 text-center shrink-0"
+              title="Reset to fit (0)" @click="zoomFit"
             >{{ imgFit ? 'Fit' : (imgZoom * 100).toFixed(0) + '%' }}</button>
             <button class="toolbar-btn" title="Zoom in (+)" @click="zoomIn">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/></svg>
@@ -209,14 +204,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           <div class="w-px h-5 bg-gray-200 shrink-0 mx-1" />
 
           <!-- Download (always) -->
-          <button class="toolbar-btn-label" title="Download" @click="$emit('download', entry)">
+          <button class="toolbar-btn-label shrink-0" title="Download" @click="$emit('download', entry)">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
             Download
           </button>
 
           <!-- Close -->
-          <button class="toolbar-btn ml-1" title="Close (Esc)" @click="$emit('close')">
-            <svg class="w-4.5 h-4.5" style="width:18px;height:18px" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          <button class="toolbar-btn ml-1 shrink-0" title="Close (Esc)" @click="$emit('close')">
+            <svg style="width:18px;height:18px" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
 
@@ -236,23 +231,47 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
           </div>
 
           <!-- ── Image ────────────────────────────────────────── -->
+          <!-- Fit mode: image is contained inside the panel, centered.         -->
+          <!-- Zoom mode: panel scrolls; image expands to imgZoom × natural size -->
           <div
             v-else-if="fileType === 'image' && gatewayUrl"
-            class="w-full h-full overflow-auto flex items-center justify-center"
+            :class="imgFit
+              ? 'w-full h-full flex items-center justify-center overflow-hidden'
+              : 'w-full h-full overflow-auto'"
           >
+            <!-- Fit mode -->
             <img
+              v-if="imgFit"
               :src="gatewayUrl"
               :alt="entry?.Name"
               :style="{
-                transform: `scale(${imgFit ? 1 : imgZoom}) rotate(${imgRotate}deg)`,
-                maxWidth:  imgFit ? '100%' : 'none',
-                maxHeight: imgFit ? '100%' : 'none',
-                objectFit: imgFit ? 'contain' : 'none',
+                maxWidth:  '100%',
+                maxHeight: '100%',
+                objectFit: 'contain',
+                transform: imgRotate ? `rotate(${imgRotate}deg)` : undefined,
                 transition: 'transform 0.15s ease',
               }"
               class="select-none"
               draggable="false"
             />
+            <!-- Zoom mode: scale via transform so scroll works naturally -->
+            <div
+              v-else
+              class="flex items-center justify-center p-4"
+              style="min-width: 100%; min-height: 100%"
+            >
+              <img
+                :src="gatewayUrl"
+                :alt="entry?.Name"
+                :style="{
+                  transform: `scale(${imgZoom})${imgRotate ? ` rotate(${imgRotate}deg)` : ''}`,
+                  transformOrigin: 'center center',
+                  transition: 'transform 0.15s ease',
+                }"
+                class="select-none block"
+                draggable="false"
+              />
+            </div>
           </div>
 
           <!-- ── Video ────────────────────────────────────────── -->
