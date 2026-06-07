@@ -149,9 +149,10 @@ async function proxyToIpfs(req, reply) {
   const url = `${IPFS_API}${req.url}`
 
   // Build forwarded headers — drop authorization (JWT must not reach IPFS)
+  const HOP_BY_HOP = new Set(['host', 'authorization', 'connection', 'keep-alive', 'te', 'trailers', 'transfer-encoding', 'upgrade'])
   const headers = {}
   for (const [k, v] of Object.entries(req.headers)) {
-    if (k === 'host' || k === 'authorization') continue
+    if (HOP_BY_HOP.has(k)) continue
     headers[k] = v
   }
 
