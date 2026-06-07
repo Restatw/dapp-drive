@@ -2,7 +2,7 @@
 #
 # Usage:
 #   .\deploy.ps1                        # build → add → publish (offline/local)
-#   .\deploy.ps1 -SetupCors             # first time: also configure IPFS CORS
+#   .\deploy.ps1 -SetupCors             # first time: configure CORS + fix listen address
 #   .\deploy.ps1 -SetupCors -SkipBuild  # fix CORS only (no rebuild, no re-add)
 #   .\deploy.ps1 -Online                # propagate IPNS record to DHT network
 
@@ -84,13 +84,19 @@ if ($LASTEXITCODE -ne 0) { Fail "ipfs name publish failed" }
 Ok "Published"
 
 # ── 6. CORS setup (first time or -SetupCors) ─────────────────────
-$origin    = "http://$ipnsId.ipns.localhost:8080"
-$devOrigin = "http://localhost:5173"
+# All origins allowed to call the local IPFS API (http://127.0.0.1:5001):
+#   browsers treat 127.0.0.1 as a secure context, so HTTPS → HTTP is permitted.
+$origin          = "http://$ipnsId.ipns.localhost:8080"   # local IPNS gateway
+$inbrowserOrigin = "https://$ipnsId.ipns.inbrowser.link"  # public gateway (inbrowser.link)
+$dwebOrigin      = "https://$ipnsId.ipns.dweb.link"       # public gateway (dweb.link)
+$devOrigin       = "http://localhost:5173"                 # Vite dev server
 
 if ($SetupCors) {
-    Step "Configuring IPFS CORS"
-    Info "Allow-Origin (prod): $origin"
-    Info "Allow-Origin (dev) : $devOrigin"
+    Step "Configuring IPFS CORS + listen address"
+    Info "Allow-Origin (local gw)  : $origin"
+    Info "Allow-Origin (inbrowser) : $inbrowserOrigin"
+    Info "Allow-Origin (dweb)      : $dwebOrigin"
+    Info "Allow-Origin (dev)       : $devOrigin"
 
     # `ipfs config --json` + PowerShell = quoting hell: Windows strips the inner "
     # from ["http://..."] before ipfs sees it. Bypass entirely by editing the
@@ -105,13 +111,28 @@ if ($SetupCors) {
         $cfg | Add-Member -NotePropertyName 'API' -NotePropertyValue ([PSCustomObject]@{}) -Force
     }
 
-    # [string[]] forces ConvertTo-Json to emit a JSON array even for a list.
-    # Both origins are whitelisted: IPNS subdomain (production) + Vite dev server.
+    # ── CORS headers ──────────────────────────────────────────────
+    # [string[]] forces ConvertTo-Json to emit a JSON array even for a single string.
+    # Four origins: local IPNS gateway + two public IPNS gateways + Vite dev server.
     $cfg.API | Add-Member -NotePropertyName 'HTTPHeaders' -NotePropertyValue ([PSCustomObject]@{
-        'Access-Control-Allow-Origin'  = [string[]]@($origin, $devOrigin)
+        'Access-Control-Allow-Origin'  = [string[]]@($origin, $inbrowserOrigin, $dwebOrigin, $devOrigin)
         'Access-Control-Allow-Methods' = [string[]]@('GET', 'POST', 'PUT')
         'Access-Control-Allow-Headers' = [string[]]@('Authorization')
     }) -Force
+
+    # ── Listen addresses: use localhost instead of 127.0.0.1 ─────
+    # The app is compiled with VITE_IPFS_API=http://localhost:5001.
+    # Browsers (especially Firefox) treat http://localhost as a trustworthy
+    # origin and allow HTTPS pages to call it without mixed-content blocking.
+    # http://127.0.0.1 is an IP address and may be blocked in some browsers.
+    if ($null -eq $cfg.Addresses) {
+        $cfg | Add-Member -NotePropertyName 'Addresses' -NotePropertyValue ([PSCustomObject]@{}) -Force
+    }
+    $cfg.Addresses | Add-Member -NotePropertyName 'API'     -NotePropertyValue '/ip4/127.0.0.1/tcp/5001' -Force
+    $cfg.Addresses | Add-Member -NotePropertyName 'Gateway' -NotePropertyValue '/ip4/127.0.0.1/tcp/8080' -Force
+
+    Info "API listen    : /ip4/127.0.0.1/tcp/5001  (localhost:5001)"
+    Info "Gateway listen: /ip4/127.0.0.1/tcp/8080  (localhost:8080)"
 
     # PowerShell 5.1's -Encoding UTF8 writes a BOM which IPFS can't parse.
     # Use .NET directly to write UTF-8 without BOM.
@@ -119,20 +140,24 @@ if ($SetupCors) {
     [System.IO.File]::WriteAllText($cfgPath, ($cfg | ConvertTo-Json -Depth 20), $utf8NoBom)
     if (-not $?) { Fail "Failed to write IPFS config" }
 
-    Ok "CORS configured"
+    Ok "CORS + listen address configured"
     Warn "Restart daemon to apply:"
     Warn "  ipfs shutdown"
     Warn "  ipfs daemon"
 }
 
 # ── 7. Summary ────────────────────────────────────────────────────
-$line = "-" * 54
+$line = "-" * 60
 Write-Host ""
 Write-Host $line -ForegroundColor DarkGray
 Write-Host " Deployed successfully!" -ForegroundColor Green
 Write-Host ""
-Write-Host "  CID   $cid"
-Write-Host "  IPNS  $ipnsId"
-Write-Host "  URL   $origin" -ForegroundColor Cyan
+Write-Host "  CID    $cid"
+Write-Host "  IPNS   $ipnsId"
+Write-Host ""
+Write-Host "  Access via:" -ForegroundColor DarkGray
+Write-Host "    (local)      $origin/#/" -ForegroundColor Cyan
+Write-Host "    (public)     $inbrowserOrigin/#/" -ForegroundColor Cyan
+Write-Host "    (public alt) $dwebOrigin/#/" -ForegroundColor Cyan
 Write-Host $line -ForegroundColor DarkGray
 Write-Host ""
