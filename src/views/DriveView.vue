@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useDriveStore } from '../stores/drive'
 import { useIpfsStore } from '../stores/ipfs'
 import AppTopbar from '../components/AppTopbar.vue'
@@ -9,31 +9,30 @@ import FileGrid from '../components/FileGrid.vue'
 import FileList from '../components/FileList.vue'
 import CreateFolderModal from '../components/CreateFolderModal.vue'
 import FilePreviewModal from '../components/FilePreviewModal.vue'
+import MoveModal from '../components/MoveModal.vue'
 import UploadProgress from '../components/UploadProgress.vue'
 
 const drive = useDriveStore()
-const ipfs = useIpfsStore()
+const ipfs  = useIpfsStore()
 
 const showCreateFolder = ref(false)
-const previewEntry = ref(null)
-const isDragging = ref(false)
+const showMoveModal    = ref(false)
+const isDragging       = ref(false)
+
+// Preview: index into the file-only list
+const previewIndex   = ref(-1)
+const previewEntries = computed(() => drive.filteredEntries.filter(e => e.Type !== 1))
+
+const selectionCount = computed(() => drive.selected.size)
+const selectedNames  = computed(() => [...drive.selected])
 
 onMounted(() => drive.navigate('/'))
 
 // ── Drag & drop ───────────────────────────────────────────────────
-function onDragOver(e) {
-  e.preventDefault()
-  isDragging.value = true
-}
-
-function onDragLeave(e) {
-  // Only clear when leaving the drop zone entirely
-  if (!e.currentTarget.contains(e.relatedTarget)) isDragging.value = false
-}
-
+function onDragOver(e)  { e.preventDefault(); isDragging.value = true }
+function onDragLeave(e) { if (!e.currentTarget.contains(e.relatedTarget)) isDragging.value = false }
 function onDrop(e) {
-  e.preventDefault()
-  isDragging.value = false
+  e.preventDefault(); isDragging.value = false
   const files = Array.from(e.dataTransfer.files)
   if (files.length) drive.uploadFiles(files)
 }
@@ -41,8 +40,7 @@ function onDrop(e) {
 // ── File input ────────────────────────────────────────────────────
 function openFileInput() {
   const input = document.createElement('input')
-  input.type = 'file'
-  input.multiple = true
+  input.type = 'file'; input.multiple = true
   input.onchange = e => {
     const files = Array.from(e.target.files)
     if (files.length) drive.uploadFiles(files)
@@ -51,13 +49,21 @@ function openFileInput() {
 }
 
 // ── Entry actions ─────────────────────────────────────────────────
+function openPreview(entry) {
+  const i = previewEntries.value.findIndex(e => e.Name === entry.Name)
+  if (i >= 0) previewIndex.value = i
+}
+
 function handleOpen(entry) {
   if (entry.Type === 1) {
-    const next = drive.currentPath === '/' ? '/' + entry.Name : drive.currentPath + '/' + entry.Name
-    drive.navigate(next)
+    drive.navigate(drive.currentPath === '/' ? '/' + entry.Name : drive.currentPath + '/' + entry.Name)
   } else {
-    previewEntry.value = entry
+    openPreview(entry)
   }
+}
+
+function handleSelect(entry) {
+  drive.toggleSelect(entry.Name)
 }
 
 function handleRename(entry) {
@@ -67,11 +73,14 @@ function handleRename(entry) {
   }
 }
 
+function entryRelativePath(entry) {
+  return drive.currentPath === '/' ? '/' + entry.Name : drive.currentPath + '/' + entry.Name
+}
+
 async function handleShare(entry) {
   let hash = entry.Hash
   if (!hash) {
-    const p = drive.currentPath === '/' ? '/' + entry.Name : drive.currentPath + '/' + entry.Name
-    const s = await ipfs.stat(p)
+    const s = await drive.statEntry(entryRelativePath(entry))
     if (s) hash = s.Hash
   }
   if (!hash) return alert('Could not resolve CID for this file.')
@@ -87,17 +96,30 @@ async function handleShare(entry) {
 async function handleDownload(entry) {
   let hash = entry.Hash
   if (!hash) {
-    const p = drive.currentPath === '/' ? '/' + entry.Name : drive.currentPath + '/' + entry.Name
-    const s = await ipfs.stat(p)
+    const s = await drive.statEntry(entryRelativePath(entry))
     if (s) hash = s.Hash
   }
   if (!hash) return
   const a = document.createElement('a')
   a.href = ipfs.getGatewayUrl(hash)
   a.download = entry.Name
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+}
+
+function handlePin(entry) {
+  const rel = entryRelativePath(entry)
+  drive.isPinned(rel) ? drive.unpinFolder(rel) : drive.pinFolder(rel, entry.Name)
+}
+
+// ── Bulk selection actions ────────────────────────────────────────
+async function handleBulkDelete() {
+  if (!confirm(`Delete ${selectionCount.value} item(s)? This cannot be undone.`)) return
+  await drive.deleteSelected()
+}
+
+async function handleMoveConfirm(destPath) {
+  showMoveModal.value = false
+  await drive.moveSelected(destPath)
 }
 </script>
 
@@ -121,14 +143,14 @@ async function handleDownload(entry) {
     <div class="flex flex-1 overflow-hidden min-h-0">
       <AppSidebar @new-folder="showCreateFolder = true" @upload="openFileInput" />
 
-      <!-- Main content area -->
+      <!-- Main content -->
       <main
         class="relative flex-1 flex flex-col overflow-hidden min-w-0"
         @dragover="onDragOver"
         @dragleave="onDragLeave"
         @drop="onDrop"
       >
-        <!-- Drag overlay (pointer-events-none so drop fires on parent) -->
+        <!-- Drag overlay -->
         <Transition name="fade">
           <div
             v-if="isDragging"
@@ -149,7 +171,7 @@ async function handleDownload(entry) {
               title="Grid view"
               @click="drive.viewMode = 'grid'"
             >
-              <svg class="w-4.5 h-4.5" style="width:18px;height:18px" fill="currentColor" viewBox="0 0 24 24">
+              <svg style="width:18px;height:18px" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M3 3h8v8H3zm10 0h8v8h-8zM3 13h8v8H3zm10 0h8v8h-8z"/>
               </svg>
             </button>
@@ -164,6 +186,58 @@ async function handleDownload(entry) {
             </button>
           </div>
         </div>
+
+        <!-- ── Selection toolbar ──────────────────────────────── -->
+        <Transition name="sel-bar">
+          <div
+            v-if="selectionCount > 0"
+            class="mx-5 mb-2 px-4 py-2.5 bg-blue-500 text-white rounded-xl flex items-center gap-3 shadow-md shrink-0"
+          >
+            <!-- Count + clear -->
+            <button
+              class="flex items-center gap-2 text-sm font-semibold hover:text-blue-100 transition"
+              title="Clear selection"
+              @click="drive.clearSelection()"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              {{ selectionCount }} selected
+            </button>
+
+            <div class="flex-1" />
+
+            <!-- Select all -->
+            <button
+              class="text-xs font-medium bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg transition"
+              @click="drive.selectAll()"
+            >
+              Select all
+            </button>
+
+            <!-- Move -->
+            <button
+              class="flex items-center gap-1.5 text-xs font-medium bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg transition"
+              @click="showMoveModal = true"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+              </svg>
+              Move
+            </button>
+
+            <!-- Delete -->
+            <button
+              class="flex items-center gap-1.5 text-xs font-medium bg-white/20 hover:bg-red-400/60 px-2.5 py-1 rounded-lg transition"
+              @click="handleBulkDelete"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+              Delete
+            </button>
+          </div>
+        </Transition>
 
         <!-- Loading spinner -->
         <div v-if="drive.loading" class="flex-1 flex items-center justify-center">
@@ -190,7 +264,8 @@ async function handleDownload(entry) {
               {{ drive.searchQuery ? 'No matching files' : 'This folder is empty' }}
             </p>
             <p v-if="!drive.searchQuery" class="text-sm text-gray-400 mt-1.5">
-              Drag files here or click <button class="text-blue-500 hover:underline" @click="openFileInput">Upload</button>
+              Drag files here or click
+              <button class="text-blue-500 hover:underline" @click="openFileInput">Upload</button>
             </p>
           </div>
         </div>
@@ -200,22 +275,28 @@ async function handleDownload(entry) {
           <FileGrid
             v-if="drive.viewMode === 'grid'"
             :entries="drive.filteredEntries"
+            :selected="drive.selected"
             @open="handleOpen"
-            @preview="previewEntry = $event"
+            @preview="openPreview($event)"
             @delete="drive.deleteEntry"
             @rename="handleRename"
             @share="handleShare"
             @download="handleDownload"
+            @select="handleSelect"
+            @pin="handlePin"
           />
           <FileList
             v-else
             :entries="drive.filteredEntries"
+            :selected="drive.selected"
             @open="handleOpen"
-            @preview="previewEntry = $event"
+            @preview="openPreview($event)"
             @delete="drive.deleteEntry"
             @rename="handleRename"
             @share="handleShare"
             @download="handleDownload"
+            @select="handleSelect"
+            @pin="handlePin"
           />
         </div>
       </main>
@@ -231,11 +312,20 @@ async function handleDownload(entry) {
       @create="name => { drive.createFolder(name); showCreateFolder = false }"
     />
     <FilePreviewModal
-      v-if="previewEntry"
-      :entry="previewEntry"
+      v-if="previewIndex >= 0"
+      :entries="previewEntries"
+      :initial-index="previewIndex"
       :current-path="drive.currentPath"
-      @close="previewEntry = null"
+      @close="previewIndex = -1"
       @download="handleDownload"
+    />
+    <MoveModal
+      v-if="showMoveModal"
+      :count="selectionCount"
+      :source-path="drive.currentPath"
+      :selected-names="selectedNames"
+      @close="showMoveModal = false"
+      @confirm="handleMoveConfirm"
     />
   </div>
 </template>
@@ -245,4 +335,6 @@ async function handleDownload(entry) {
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 .banner-enter-active, .banner-leave-active { transition: all 0.2s; }
 .banner-enter-from, .banner-leave-to { opacity: 0; transform: translateY(-100%); }
+.sel-bar-enter-active, .sel-bar-leave-active { transition: all 0.2s ease; }
+.sel-bar-enter-from, .sel-bar-leave-to { opacity: 0; transform: translateY(-8px); }
 </style>

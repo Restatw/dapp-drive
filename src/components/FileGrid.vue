@@ -1,8 +1,18 @@
 <script setup>
 import FileCard from './FileCard.vue'
+import { useDriveStore } from '../stores/drive'
 
-defineProps({ entries: { type: Array, default: () => [] } })
-defineEmits(['open', 'preview', 'delete', 'rename', 'share', 'download'])
+const props = defineProps({
+  entries:  { type: Array, default: () => [] },
+  selected: { type: Set,   default: () => new Set() },
+})
+defineEmits(['open', 'preview', 'delete', 'rename', 'share', 'download', 'select', 'pin'])
+
+const drive = useDriveStore()
+
+function entryPath(entry) {
+  return drive.currentPath === '/' ? '/' + entry.Name : drive.currentPath + '/' + entry.Name
+}
 </script>
 
 <template>
@@ -11,12 +21,16 @@ defineEmits(['open', 'preview', 'delete', 'rename', 'share', 'download'])
       v-for="entry in entries"
       :key="entry.Name"
       :entry="entry"
+      :is-selected="selected.has(entry.Name)"
+      :is-pinned="entry.Type === 1 && drive.isPinned(entryPath(entry))"
       @open="$emit('open', entry)"
       @preview="$emit('preview', entry)"
       @delete="$emit('delete', entry)"
       @rename="$emit('rename', entry)"
       @share="$emit('share', entry)"
       @download="$emit('download', entry)"
+      @select="$emit('select', entry)"
+      @pin="$emit('pin', entry)"
     />
   </div>
 </template>
