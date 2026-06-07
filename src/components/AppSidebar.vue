@@ -5,7 +5,10 @@ import { useIdentityStore } from '../stores/identity'
 import { useIpfsStore } from '../stores/ipfs'
 import { formatSize } from '../utils/fileType'
 
-defineEmits(['new-folder', 'upload'])
+const props = defineProps({
+  open: { type: Boolean, default: false },
+})
+defineEmits(['new-folder', 'upload', 'close'])
 
 const drive    = useDriveStore()
 const identity = useIdentityStore()
@@ -41,13 +44,41 @@ const syncLabelClass = computed(() => {
 </script>
 
 <template>
-  <aside class="w-52 bg-white border-r border-gray-200 flex flex-col py-3 shrink-0 overflow-y-auto">
+  <!-- Mobile backdrop -->
+  <Transition name="backdrop">
+    <div
+      v-if="open"
+      class="fixed inset-0 z-30 bg-black/40 md:hidden"
+      @click="$emit('close')"
+    />
+  </Transition>
+
+  <!-- Sidebar panel -->
+  <aside
+    class="bg-white border-r border-gray-200 flex flex-col py-3 shrink-0 overflow-y-auto
+           fixed inset-y-0 left-0 z-40 w-64 transition-transform duration-200
+           md:relative md:w-52 md:translate-x-0 md:z-auto"
+    :class="open ? 'translate-x-0 shadow-xl' : '-translate-x-full'"
+  >
+
+    <!-- Mobile header row (close button) -->
+    <div class="md:hidden flex items-center justify-between px-3 mb-2">
+      <div class="flex items-center gap-2">
+        <span class="text-xl select-none">📦</span>
+        <span class="text-base font-semibold text-gray-800">IPFS Drive</span>
+      </div>
+      <button class="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100 transition" @click="$emit('close')">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
 
     <!-- Action buttons -->
-    <div class="px-3 mb-3 space-y-1">
+    <div class="px-3 mb-3 mt-2 space-y-1">
       <button
         class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 shadow-sm transition"
-        @click="$emit('upload')"
+        @click="$emit('upload'); $emit('close')"
       >
         <svg class="w-5 h-5 text-blue-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
@@ -56,7 +87,7 @@ const syncLabelClass = computed(() => {
       </button>
       <button
         class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-100 transition"
-        @click="$emit('new-folder')"
+        @click="$emit('new-folder'); $emit('close')"
       >
         <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
@@ -72,7 +103,7 @@ const syncLabelClass = computed(() => {
       <button
         :class="['w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition',
           drive.currentPath === '/' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100']"
-        @click="drive.navigate('/')"
+        @click="drive.navigate('/'); $emit('close')"
       >
         <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
@@ -93,7 +124,7 @@ const syncLabelClass = computed(() => {
           :key="pin.path"
           class="group/pin w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition cursor-pointer"
           :class="drive.currentPath === pin.path ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-100'"
-          @click="drive.navigate(pin.path)"
+          @click="drive.navigate(pin.path); $emit('close')"
         >
           <svg class="w-4 h-4 shrink-0 text-amber-400" fill="currentColor" viewBox="0 0 24 24">
             <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/>
@@ -168,3 +199,8 @@ const syncLabelClass = computed(() => {
     </div>
   </aside>
 </template>
+
+<style scoped>
+.backdrop-enter-active, .backdrop-leave-active { transition: opacity 0.2s; }
+.backdrop-enter-from, .backdrop-leave-to { opacity: 0; }
+</style>

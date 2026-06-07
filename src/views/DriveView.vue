@@ -18,6 +18,7 @@ const ipfs  = useIpfsStore()
 const showCreateFolder = ref(false)
 const showMoveModal    = ref(false)
 const isDragging       = ref(false)
+const sidebarOpen      = ref(false)
 
 // Preview: index into the file-only list
 const previewIndex   = ref(-1)
@@ -125,7 +126,7 @@ async function handleMoveConfirm(destPath) {
 
 <template>
   <div class="h-screen flex flex-col bg-gray-50 overflow-hidden">
-    <AppTopbar @upload="openFileInput" />
+    <AppTopbar @upload="openFileInput" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
 
     <!-- Offline banner -->
     <Transition name="banner">
@@ -143,7 +144,12 @@ async function handleMoveConfirm(destPath) {
     </Transition>
 
     <div class="flex flex-1 overflow-hidden min-h-0">
-      <AppSidebar @new-folder="showCreateFolder = true" @upload="openFileInput" />
+      <AppSidebar
+        :open="sidebarOpen"
+        @new-folder="showCreateFolder = true; sidebarOpen = false"
+        @upload="openFileInput; sidebarOpen = false"
+        @close="sidebarOpen = false"
+      />
 
       <!-- Main content -->
       <main

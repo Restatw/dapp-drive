@@ -8,11 +8,33 @@ const props = defineProps({
   isSelected: { type: Boolean, default: false },
   isPinned:   { type: Boolean, default: false },
 })
-defineEmits(['open', 'preview', 'delete', 'rename', 'share', 'download', 'select', 'pin'])
+const emit = defineEmits(['open', 'preview', 'delete', 'rename', 'share', 'download', 'select', 'pin'])
 
 const ipfs = useIpfsStore()
 const showMenu = ref(false)
 const imgError = ref(false)
+
+// On touch devices: single tap = open; on desktop: dblclick = open
+const isTouch = typeof window !== 'undefined' &&
+  window.matchMedia('(pointer: coarse)').matches
+
+// Long-press → select (touch only); guard prevents click from also firing
+let pressTimer = null
+let longPressed = false
+
+function onTouchStart() {
+  longPressed = false
+  pressTimer = setTimeout(() => {
+    longPressed = true
+    emit('select')
+  }, 500)
+}
+function onTouchEnd() {
+  if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
+}
+function onTouchMove() {
+  if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
+}
 
 const isFolder = computed(() => props.entry.Type === 1)
 const isImage  = computed(() => !isFolder.value && getFileType(props.entry.Name) === 'image')
@@ -40,12 +62,16 @@ function closeMenu() {
     :class="isSelected
       ? 'border-blue-400 bg-blue-50/40 shadow-sm ring-1 ring-blue-300'
       : 'border-gray-100 hover:border-gray-200'"
-    @dblclick="$emit('open')"
+    @dblclick="!isTouch && emit('open')"
+    @click="isTouch && !longPressed && emit('open')"
+    @touchstart.passive="onTouchStart"
+    @touchend="onTouchEnd"
+    @touchmove.passive="onTouchMove"
   >
-    <!-- ● Checkbox (top-left, hover or selected) -->
+    <!-- ● Checkbox (top-left: always on touch / hover on desktop) -->
     <div
       class="absolute top-1.5 left-1.5 z-10 transition"
-      :class="isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
+      :class="isSelected ? 'opacity-100' : isTouch ? 'opacity-0' : 'opacity-0 group-hover:opacity-100'"
       @click.stop="$emit('select')"
     >
       <div
@@ -80,8 +106,9 @@ function closeMenu() {
       </p>
     </div>
 
-    <!-- ⋮ menu button (top-right, shows on hover) -->
-    <div class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 transition z-10">
+    <!-- ⋮ menu button (top-right, hover on desktop / always on touch) -->
+    <div class="absolute top-1.5 right-1.5 transition z-10"
+         :class="isTouch ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'">
       <button
         class="p-1 rounded-full bg-white/80 hover:bg-gray-200 shadow-sm"
         @click="openMenu"

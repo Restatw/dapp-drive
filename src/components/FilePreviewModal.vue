@@ -122,9 +122,80 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
       <div class="bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         style="width: min(92vw, 1100px); height: min(90vh, 780px)">
 
-        <!-- ── Header ──────────────────────────────────────────── -->
-        <div class="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 shrink-0 overflow-x-auto">
+        <!-- ── Header ──────────────────────────────────────────────────────── -->
 
+        <!-- ▌Mobile: Row 1 — nav + filename + close (no scroll needed) -->
+        <div class="sm:hidden flex items-center gap-2 px-3 py-2 border-b border-gray-100 shrink-0">
+          <!-- Prev / counter / Next -->
+          <div class="flex items-center gap-0.5 shrink-0">
+            <button
+              class="p-2 rounded-lg transition"
+              :class="hasPrev ? 'text-gray-500 active:bg-gray-100' : 'text-gray-200'"
+              :disabled="!hasPrev" @click="prev"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+              </svg>
+            </button>
+            <span class="text-xs text-gray-400 w-9 text-center tabular-nums select-none">{{ posLabel }}</span>
+            <button
+              class="p-2 rounded-lg transition"
+              :class="hasNext ? 'text-gray-500 active:bg-gray-100' : 'text-gray-200'"
+              :disabled="!hasNext" @click="next"
+            >
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+              </svg>
+            </button>
+          </div>
+          <!-- filename (takes remaining space) -->
+          <span class="text-sm shrink-0 select-none">{{ getFileIcon(entry) }}</span>
+          <h3 class="text-sm font-semibold text-gray-800 truncate flex-1 min-w-0" :title="entry?.Name">
+            {{ entry?.Name }}
+          </h3>
+          <!-- Close -->
+          <button class="toolbar-btn shrink-0" @click="$emit('close')">
+            <svg style="width:18px;height:18px" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- ▌Mobile: Row 2 — tools + download (scrollable) -->
+        <div class="sm:hidden flex items-center gap-1 px-3 py-1.5 border-b border-gray-100 shrink-0 overflow-x-auto">
+          <!-- Image tools -->
+          <template v-if="fileType === 'image'">
+            <button class="toolbar-btn" title="Zoom out" @click="zoomOut">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM13 10H7"/></svg>
+            </button>
+            <button
+              class="text-xs font-mono text-gray-500 px-2 py-1.5 rounded active:bg-gray-100 transition w-12 text-center shrink-0"
+              @click="zoomFit"
+            >{{ imgFit ? 'Fit' : (imgZoom * 100).toFixed(0) + '%' }}</button>
+            <button class="toolbar-btn" title="Zoom in" @click="zoomIn">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7"/></svg>
+            </button>
+            <button class="toolbar-btn" title="Rotate" @click="rotate">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+          </template>
+          <!-- Text / Code -->
+          <template v-else-if="['text','code'].includes(fileType)">
+            <button class="toolbar-btn-label" @click="copyText">
+              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              {{ copied === 'text' ? '✓ Copied' : 'Copy' }}
+            </button>
+          </template>
+          <div class="flex-1" />
+          <!-- Download -->
+          <button class="toolbar-btn-label shrink-0" @click="$emit('download', entry)">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Download
+          </button>
+        </div>
+
+        <!-- ▌Desktop: single row (unchanged look) -->
+        <div class="hidden sm:flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 shrink-0 overflow-x-auto">
           <!-- Prev / counter / Next -->
           <div class="flex items-center gap-1 shrink-0">
             <button
@@ -147,24 +218,13 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               </svg>
             </button>
           </div>
-
           <div class="w-px h-5 bg-gray-200 shrink-0 mx-1" />
-
-          <!-- Icon + filename -->
           <span class="text-base shrink-0 select-none">{{ getFileIcon(entry) }}</span>
           <h3 class="text-sm font-semibold text-gray-800 truncate min-w-0" style="flex: 1 1 60px" :title="entry?.Name">
             {{ entry?.Name }}
           </h3>
-
-          <!-- File size -->
-          <span v-if="entry?.Size" class="text-xs text-gray-400 shrink-0">
-            {{ formatSize(entry.Size) }}
-          </span>
-
+          <span v-if="entry?.Size" class="text-xs text-gray-400 shrink-0">{{ formatSize(entry.Size) }}</span>
           <div class="w-px h-5 bg-gray-200 shrink-0 mx-1" />
-
-          <!-- ── Type-specific toolbar ────────────────────────── -->
-
           <!-- Image tools -->
           <template v-if="fileType === 'image'">
             <button class="toolbar-btn" title="Zoom out (−)" @click="zoomOut">
@@ -184,31 +244,26 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
             </button>
           </template>
-
-          <!-- Text / Code tools -->
+          <!-- Text / Code -->
           <template v-else-if="['text','code'].includes(fileType)">
             <button class="toolbar-btn-label" @click="copyText">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
               {{ copied === 'text' ? '✓ Copied' : 'Copy' }}
             </button>
           </template>
-
-          <!-- PDF / Video: open in browser -->
+          <!-- PDF / Video -->
           <template v-else-if="['pdf','video'].includes(fileType)">
             <button class="toolbar-btn-label" @click="openGw">
               <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
               Open
             </button>
           </template>
-
           <div class="w-px h-5 bg-gray-200 shrink-0 mx-1" />
-
-          <!-- Download (always) -->
+          <!-- Download -->
           <button class="toolbar-btn-label shrink-0" title="Download" @click="$emit('download', entry)">
             <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
             Download
           </button>
-
           <!-- Close -->
           <button class="toolbar-btn ml-1 shrink-0" title="Close (Esc)" @click="$emit('close')">
             <svg style="width:18px;height:18px" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
